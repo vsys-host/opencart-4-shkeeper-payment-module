@@ -1,0 +1,131 @@
+<fieldset>
+<div id="shkeeper">
+  <legend>{{ text_instruction }}</legend>
+  <div class="border rounded p-3 mb-2">
+    <p>{{ shkeeper }}</p>
+  </div>
+
+  {# currency dropdown #}
+    <div id="shkeeper-body">
+        <div class="mb-3">
+            <select id="shkeeper-currency" name="shkeeper_currency"></select>
+        </div>
+
+        <input type="button" value="{{ entry_get_address }}" id="get-address" class="btn btn-danger" />
+
+        {# QRcode & payment info block #}
+        <div class="mt-3">
+            <p id="wallet-address"></p>
+            <p id="amount"></p>
+            <div id="qrcode" class="d-flex align-items-center justify-content-center"></div>
+        </div>
+    </div>
+</div>
+  <div class="text-end">
+    <button type="button" id="button-confirm" class="btn btn-primary" disabled>{{ button_confirm }}</button>
+  </div>
+</fieldset>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<script type="text/javascript">
+$(document).ready(function() {
+    $.ajax({
+        url: 'index.php?route=extension/shkeeper/payment/shkeeper{{ oc_separator }}getCurrencies&language={{ language }}',
+        type: 'get',
+        beforeSend: function() {
+            $('#get-address').button('loading');
+            $('#button-confirm').button('loading');
+        },
+        complete: function() {
+            $('#get-address').button('reset');
+            $('#button-confirm').button('reset');
+        },
+        success: function (response) {
+
+            if (response.error) {
+                $('#shkeeper').html(response.error)
+            }
+
+            var currencies = ''
+            Object.entries(response).forEach(([key,currency]) => {
+                currencies += '<option value="' + currency.name + '">' + currency.display_name + '</option>'
+            })
+            $('#shkeeper-currency').html(currencies)
+
+        },
+        error: function(xhr, ajaxOptions, thrownError) {
+            console.log(thrownError + "\r\n" + xhr.statusText + "\r\n" + xhr.responseText);
+        }
+    });
+});
+
+$('#get-address').on('click', function () {
+
+    {# reset current data #}
+    $('#button-confirm').attr('disabled');
+    $('#wallet-address').text('');
+    $('#amount').text('');
+    $('#qrcode').text('');
+
+    $.ajax({
+        url: 'index.php?route=extension/shkeeper/payment/shkeeper{{ oc_separator }}getInvoice&language={{ language }}',
+        type: 'post',
+        data: 'currency=' + $('#shkeeper-currency').val(),
+        beforeSend: function() {
+            $('#get-address').button('loading');
+            $('#button-confirm').button('loading');
+        },
+        complete: function() {
+            $('#get-address').button('reset');
+        },
+        success: function(response) {
+            
+            $('#wallet-address').append('<strong>{{ entry_address }}</strong> ' + response.wallet);
+            $('#amount').append('<strong>{{ entry_amount }}</strong> ' + response.amount + ' ' + response.display_name);
+
+            new QRCode(document.getElementById("qrcode"), {
+                text: response.wallet + '?amount=' + response.amount,
+                width: 128,
+                height: 128,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+            
+            $('#button-confirm').button('reset');
+            $('#button-confirm').removeAttr('disabled');
+            
+        },
+        error: function(xhr, ajaxOptions, thrownError) {
+            console.log(thrownError + "\r\n" + xhr.statusText + "\r\n" + xhr.responseText);
+        }
+    });
+})
+
+$('#button-confirm').on('click', function () {
+    var element = this;
+
+    $.ajax({
+        url: 'index.php?route=extension/shkeeper/payment/shkeeper{{ oc_separator }}confirm&language={{ language }}',
+        dataType: 'json',
+        beforeSend: function () {
+            $(element).button('loading');
+        },
+        complete: function () {
+            $(element).button('reset');
+        },
+        success: function (json) {
+            if (json['error']) {
+                $('#alert').prepend('<div class="alert alert-danger alert-dismissible"><i class="fa-solid fa-circle-exclamation"></i> ' + json['error'] + ' <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
+            }
+
+            if (json['redirect']) {
+                location = json['redirect'];
+            }
+        },
+        error: function (xhr, ajaxOptions, thrownError) {
+            console.log(thrownError + "\r\n" + xhr.statusText + "\r\n" + xhr.responseText);
+        }
+    });
+});
+</script>
